@@ -55,8 +55,11 @@ use std::hash::BuildHasherDefault;
 /// for (key, mut value) in map.iter_mut() {
 ///     value.push_str("_more");
 /// }
+/// let mutref = map.get_mut(bar);
+/// assert!(mutref.is_some());
+/// mutref.unwrap().push_str("_and_more");
 /// assert_eq!(map.remove(foo).unwrap(), "foo_more");
-/// assert_eq!(map.get(bar).unwrap(), "bar_more");
+/// assert_eq!(map.get(bar).unwrap(), "bar_more_and_more");
 /// ```
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serialize", derive(Deserialize, Serialize))]
@@ -69,19 +72,6 @@ impl<V> RandMap<V> {
         Self(HashMap::default())
     }
 
-    /// Clears the map.
-    #[inline]
-    pub fn clear(&mut self) {
-        self.0.clear()
-    }
-
-    /// Retrieves a V using the handle created by [`insert()`
-    /// ](#method.insert).
-    #[inline]
-    pub fn get(&self, handle: u64) -> Option<&V> {
-        self.0.get(&handle)
-    }
-
     /// Borrow the contained [`HashMap`
     /// ](https://doc.rust-lang.org/std/collections/struct.HashMap.html).
     #[inline]
@@ -91,8 +81,28 @@ impl<V> RandMap<V> {
         &self.0
     }
 
-    /// Insert a `V` and get an handle for retrieval.
+    /// Clears the map.
     #[inline]
+    pub fn clear(&mut self) {
+        self.0.clear()
+    }
+
+    /// Retrieves a reference to a `V` using the handle created by [`insert()`
+    /// ](#method.insert).
+    #[inline]
+    pub fn get(&self, handle: u64) -> Option<&V> {
+        self.0.get(&handle)
+    }
+
+    /// Retrieves a mutable reference to a `V` using the handle created by
+    /// [`insert()`](#method.insert).
+    #[inline]
+    pub fn get_mut(&mut self, handle: u64) -> Option<&mut V> {
+        self.0.get_mut(&handle)
+    }
+
+    /// Insert a `V` and get a handle for retrieval.
+    ///
     pub fn insert(&mut self, value: V) -> u64 {
         use rand::{thread_rng, Rng};
         let key: u64 = thread_rng().gen();
@@ -101,6 +111,7 @@ impl<V> RandMap<V> {
     }
 
     /// Equivalent to `as_hash_map().iter()`.
+    // TODO: make it (u64, &V)
     #[inline]
     pub fn iter(&self) -> Iter<u64, V> {
         self.0.iter()
