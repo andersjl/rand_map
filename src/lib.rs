@@ -3,7 +3,7 @@
 use hashers::null::PassThroughHasher;
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
-use std::collections::hash_map::{HashMap, Iter, IterMut};
+use std::collections::hash_map::{self, HashMap};
 use std::hash::BuildHasherDefault;
 
 /// A map that creates a random handle on insertion to use when retrieving.
@@ -47,12 +47,13 @@ use std::hash::BuildHasherDefault;
 /// assert_eq!(map.len(), 2);
 /// assert_eq!(map.get(foo), Some(&"foo".to_string()));
 /// assert_eq!(map.get(bar).unwrap(), "bar");
-/// for (key, value) in map.as_hash_map() {
-///     if *key == foo {
-///         assert_eq!(value, "foo");
+/// for (key, value) in &map {
+///     if key == bar {
+///         assert_eq!(value, "bar");
 ///     }
 /// }
 /// for (key, mut value) in map.iter_mut() {
+///     assert!(vec![foo, bar].contains(&key));
 ///     value.push_str("_more");
 /// }
 /// let mutref = map.get_mut(bar);
@@ -60,6 +61,9 @@ use std::hash::BuildHasherDefault;
 /// mutref.unwrap().push_str("_and_more");
 /// assert_eq!(map.remove(foo).unwrap(), "foo_more");
 /// assert_eq!(map.get(bar).unwrap(), "bar_more_and_more");
+/// // Note that as_hash_map() returns a HashMap<u64, _> the methods of which
+/// // generally take a key parameter that is &u64.
+/// assert!(map.as_hash_map().contains_key(&bar));
 /// ```
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serialize", derive(Deserialize, Serialize))]
@@ -110,18 +114,17 @@ impl<V> RandMap<V> {
         key
     }
 
-    /// Equivalent to `as_hash_map().iter()`.
-    // TODO: make it (u64, &V)
+    /// Almost equivalent to `as_hash_map().iter()`, but the iterator element
+    /// type is `(u64, &V)` rather than `(&u64, &V)`
     #[inline]
-    pub fn iter(&self) -> Iter<u64, V> {
-        self.0.iter()
+    pub fn iter(&self) -> Iter<V> {
+        Iter(self.0.iter())
     }
 
-    /// The iterator element type is `(&u64, &mut V)`.
-    // TODO: make it (u64, &mut V)
+    /// The iterator element type is `(u64, &mut V)`.
     #[inline]
-    pub fn iter_mut(&mut self) -> IterMut<u64, V> {
-        self.0.iter_mut()
+    pub fn iter_mut(&mut self) -> IterMut<V> {
+        IterMut(self.0.iter_mut())
     }
 
     #[inline]
@@ -137,17 +140,36 @@ impl<V> RandMap<V> {
     }
 }
 
-/*
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// The implementation uses [`iter()`(struct.RandMap.html#method.iter)
+///
+impl<'a, V> IntoIterator for &'a RandMap<V> {
+    type Item = (u64, &'a V);
+    type IntoIter = Iter<'a, V>;
 
-    #[test]
-    fn test() {
-        let mut map: RandMap<String> = RandMap::new();
-        let foo = map.insert("foo".to_string());
-        let bar = map.insert("bar".to_string());
-        assert_ne!(foo, bar);
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
-*/
+
+/// The type returned by [`RandMap::iter()`](struct.RandMap.html#method.iter).
+///
+pub struct Iter<'a, V>(hash_map::Iter<'a, u64, V>);
+impl<'a, V> Iterator for Iter<'a, V> {
+    type Item = (u64, &'a V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next().map(|(k, v)| (*k, v))
+    }
+}
+
+/// The type returned by [`RandMap::iter_mut()`
+/// ](struct.RandMap.html#method.iter_mut).
+///
+pub struct IterMut<'a, V>(hash_map::IterMut<'a, u64, V>);
+impl<'a, V> Iterator for IterMut<'a, V> {
+    type Item = (u64, &'a mut V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next().map(|(k, v)| (*k, v))
+    }
+}
