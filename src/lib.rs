@@ -64,6 +64,7 @@ use std::hash::BuildHasherDefault;
 /// // Note that as_hash_map() returns a HashMap<u64, _> the methods of which
 /// // generally take a key parameter that is &u64.
 /// assert!(map.as_hash_map().contains_key(&bar));
+/// assert!(map == map.clone());
 /// ```
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serialize", derive(Deserialize, Serialize))]
@@ -148,6 +149,19 @@ impl<'a, V> IntoIterator for &'a RandMap<V> {
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
+    }
+}
+
+impl<V> PartialEq for RandMap<V>
+where
+    V: PartialEq,
+{
+    fn eq(&self, other: &RandMap<V>) -> bool {
+        if self.len() != other.len() {
+            return false;
+        }
+        self.iter()
+            .all(|(key, val)| other.get(key).map_or(false, |v| *val == *v))
     }
 }
 
