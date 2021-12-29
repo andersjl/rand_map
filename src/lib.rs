@@ -115,6 +115,12 @@ impl<V> RandMap<V> {
         key
     }
 
+    /// Insert a key-value pair. Does *not* return the old value for `key`.
+    ///
+    pub fn insert_key_value(&mut self, key: u64, value: V) {
+        self.0.insert(key, value);
+    }
+
     /// Almost equivalent to `as_hash_map().iter()`, but the iterator element
     /// type is `(u64, &V)` rather than `(&u64, &V)`
     #[inline]
@@ -185,5 +191,13 @@ impl<'a, V> Iterator for IterMut<'a, V> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.0.next().map(|(k, v)| (*k, v))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_rand_map_insert_key_value() {
+        panic!("test not written");
     }
 }
