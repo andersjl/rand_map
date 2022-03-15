@@ -4,7 +4,8 @@ use hashers::null::PassThroughHasher;
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::{self, HashMap};
-use std::hash::BuildHasherDefault;
+use std::hash::{BuildHasherDefault, Hash, Hasher};
+use std::marker::PhantomData;
 
 /// A map that creates a random handle on insertion to use when retrieving.
 ///
@@ -61,14 +62,16 @@ use std::hash::BuildHasherDefault;
 /// mutref.unwrap().push_str("_and_more");
 /// assert_eq!(map.remove(foo).unwrap(), "foo_more");
 /// assert_eq!(map.get(bar).unwrap(), "bar_more_and_more");
-/// // Note that as_hash_map() returns a HashMap<u64, _> the methods of which
-/// // generally take a key parameter that is &u64.
+/// // Note that as_hash_map() returns a HashMap<Handle, _> the methods of
+/// // which generally take a key parameter that is &Handle.
 /// assert!(map.as_hash_map().contains_key(&bar));
 /// assert!(map == map.clone());
 /// ```
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serialize", derive(Deserialize, Serialize))]
-pub struct RandMap<V>(HashMap<u64, V, BuildHasherDefault<PassThroughHasher>>);
+pub struct RandMap<V>(
+    HashMap<Handle<V>, V, BuildHasherDefault<PassThroughHasher>>
+);
 
 impl<V> RandMap<V> {
     /// Creates an empty map.
@@ -82,7 +85,7 @@ impl<V> RandMap<V> {
     #[inline]
     pub fn as_hash_map(
         &self,
-    ) -> &HashMap<u64, V, BuildHasherDefault<PassThroughHasher>> {
+    ) -> &HashMap<Handle<V>, V, BuildHasherDefault<PassThroughHasher>> {
         &self.0
     }
 
@@ -95,40 +98,40 @@ impl<V> RandMap<V> {
     /// Retrieves a reference to a `V` using the handle created by [`insert()`
     /// ](#method.insert).
     #[inline]
-    pub fn get(&self, handle: u64) -> Option<&V> {
+    pub fn get(&self, handle: Handle<V>) -> Option<&V> {
         self.0.get(&handle)
     }
 
     /// Retrieves a mutable reference to a `V` using the handle created by
     /// [`insert()`](#method.insert).
     #[inline]
-    pub fn get_mut(&mut self, handle: u64) -> Option<&mut V> {
+    pub fn get_mut(&mut self, handle: Handle<V>) -> Option<&mut V> {
         self.0.get_mut(&handle)
     }
 
     /// Insert a `V` and get a handle for retrieval.
     ///
-    pub fn insert(&mut self, value: V) -> u64 {
+    pub fn insert(&mut self, value: V) -> Handle<V> {
         use rand::{thread_rng, Rng};
-        let key: u64 = thread_rng().gen();
+        let key: Handle<V> = thread_rng().gen();
         self.0.insert(key, value);
         key
     }
 
     /// Insert a key-value pair. Does *not* return the old value for `key`.
     ///
-    pub fn insert_key_value(&mut self, key: u64, value: V) {
+    pub fn insert_key_value(&mut self, key: Handle<V>, value: V) {
         self.0.insert(key, value);
     }
 
     /// Almost equivalent to `as_hash_map().iter()`, but the iterator element
-    /// type is `(u64, &V)` rather than `(&u64, &V)`
+    /// type is `(Handle<V>, &V)` rather than `(&Handle<V>, &V)`
     #[inline]
     pub fn iter(&self) -> Iter<V> {
         Iter(self.0.iter())
     }
 
-    /// The iterator element type is `(u64, &mut V)`.
+    /// The iterator element type is `(Handle<V>, &mut V)`.
     #[inline]
     pub fn iter_mut(&mut self) -> IterMut<V> {
         IterMut(self.0.iter_mut())
@@ -142,7 +145,7 @@ impl<V> RandMap<V> {
     /// Remove and return the value with handle `handle`, or `None` if not
     /// found.
     #[inline]
-    pub fn remove(&mut self, handle: u64) -> Option<V> {
+    pub fn remove(&mut self, handle: Handle<V>) -> Option<V> {
         self.0.remove(&handle)
     }
 }
@@ -150,7 +153,7 @@ impl<V> RandMap<V> {
 /// The implementation uses [`iter()`(struct.RandMap.html#method.iter)
 ///
 impl<'a, V> IntoIterator for &'a RandMap<V> {
-    type Item = (u64, &'a V);
+    type Item = (Handle<V>, &'a V);
     type IntoIter = Iter<'a, V>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -173,9 +176,9 @@ where
 
 /// The type returned by [`RandMap::iter()`](struct.RandMap.html#method.iter).
 ///
-pub struct Iter<'a, V>(hash_map::Iter<'a, u64, V>);
+pub struct Iter<'a, V>(hash_map::Iter<'a, Handle<V>, V>);
 impl<'a, V> Iterator for Iter<'a, V> {
-    type Item = (u64, &'a V);
+    type Item = (Handle<V>, &'a V);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.0.next().map(|(k, v)| (*k, v))
@@ -185,12 +188,68 @@ impl<'a, V> Iterator for Iter<'a, V> {
 /// The type returned by [`RandMap::iter_mut()`
 /// ](struct.RandMap.html#method.iter_mut).
 ///
-pub struct IterMut<'a, V>(hash_map::IterMut<'a, u64, V>);
+pub struct IterMut<'a, V>(hash_map::IterMut<'a, Handle<V>, V>);
 impl<'a, V> Iterator for IterMut<'a, V> {
-    type Item = (u64, &'a mut V);
+    type Item = (Handle<V>, &'a mut V);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.0.next().map(|(k, v)| (*k, v))
+    }
+}
+
+#[derive(Debug)]
+pub struct Handle<V>(u64, PhantomData<*const V>);
+
+impl<V> Handle<V> {
+    #[inline]
+    pub fn from_u64(u: u64) -> Self {
+        Self(u, PhantomData)
+    }
+
+    #[inline]
+    pub fn as_u64(&self) -> u64 {
+        self.0
+    }
+}
+
+impl<V> From<u64> for Handle<V> {
+    fn from(item: u64) -> Handle<V> {
+        Self(item, PhantomData)
+    }
+}
+
+impl<V> From<Handle<V>> for u64 {
+    fn from(item: Handle<V>) -> u64 {
+        item.as_u64()
+    }
+}
+
+impl<V> Clone for Handle<V> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<V> Copy for Handle<V> { }
+
+impl<V> PartialEq for Handle<V> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<V> Eq for Handle<V> {}
+
+impl<V> Hash for Handle<V> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+    }
+}
+
+impl<V> rand::distributions::Distribution<Handle<V>>
+for rand::distributions::Standard {
+    fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> Handle<V> {
+        Handle(rng.gen(), PhantomData)
     }
 }
 
