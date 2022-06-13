@@ -1,13 +1,18 @@
 [package]
 name = "rand_map"
-version = "0.0.5"
+version = "0.1.0"
 authors = ["Anders Lindeberg <ajl@andersjlindeberg.se>"]
 edition = "2018"
+license = "MIT-0"
+description = "A map that creates a random handle on insertion to use when retrieving"
+repository = "https://github.com/andersjl/rand_map"
+keywords = ["collection", "map", "random-key"]
+categories = ["data-structures"]
 
 [dependencies]
-hashers = "*"
-rand = "*"
-serde = { version = "*", features = ["derive"], optional = true }
+hashers = "1.0.1"
+rand = "0.8.5"
+serde = { version = "1.0.137", features = ["derive"], optional = true }
 
 [features]
 serialize = ["serde"]
