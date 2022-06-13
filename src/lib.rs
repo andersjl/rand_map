@@ -3,6 +3,7 @@
 use hashers::null::PassThroughHasher;
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 use std::collections::hash_map::{self, HashMap};
 use std::hash::{BuildHasherDefault, Hash, Hasher};
 use std::marker::PhantomData;
@@ -34,10 +35,14 @@ use std::marker::PhantomData;
 ///
 /// ### Example:
 /// ```
-/// use rand_map::RandMap;
+/// use rand_map::{Handle, RandMap};
 ///
 /// let mut map: RandMap<String> = RandMap::new();
 /// let foo = map.insert("foo".to_string());
+/// let baz = Handle::<String>::from_u64(4711);
+/// map.insert_key_value(baz, "baz".to_string());
+/// assert_eq!(baz.as_u64(), 4711);
+/// map.remove(baz);
 /// let bar = map.insert("bar".to_string());
 /// assert_ne!(foo, bar);
 /// map.clear();
@@ -197,6 +202,7 @@ impl<'a, V> Iterator for IterMut<'a, V> {
     }
 }
 
+/// The handle to a [`RandMap`](Struct.RandMap.html) item is a typed `u64`.
 #[derive(Debug)]
 pub struct Handle<V>(u64, PhantomData<*const V>);
 
@@ -212,6 +218,16 @@ impl<V> Handle<V> {
     }
 }
 
+impl<V> Clone for Handle<V> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<V> Copy for Handle<V> { }
+
+impl<V> Eq for Handle<V> {}
+
 impl<V> From<u64> for Handle<V> {
     fn from(item: u64) -> Handle<V> {
         Self(item, PhantomData)
@@ -224,13 +240,17 @@ impl<V> From<Handle<V>> for u64 {
     }
 }
 
-impl<V> Clone for Handle<V> {
-    fn clone(&self) -> Self {
-        *self
+impl<V> Hash for Handle<V> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
     }
 }
 
-impl<V> Copy for Handle<V> { }
+impl<V> Ord for Handle<V> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.cmp(&other.0)
+    }
+}
 
 impl<V> PartialEq for Handle<V> {
     fn eq(&self, other: &Self) -> bool {
@@ -238,11 +258,9 @@ impl<V> PartialEq for Handle<V> {
     }
 }
 
-impl<V> Eq for Handle<V> {}
-
-impl<V> Hash for Handle<V> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.hash(state);
+impl<V> PartialOrd for Handle<V> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -253,10 +271,3 @@ for rand::distributions::Standard {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_rand_map_insert_key_value() {
-        panic!("test not written");
-    }
-}
