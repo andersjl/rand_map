@@ -29,9 +29,9 @@ use std::marker::PhantomData;
 ///
 /// The implementation uses a `HashMap` that does not actually hash. The
 /// contained `HashMap` can be [borrowed](#method.as_hash_map), so all
-/// nonmuting [`HashMap`
-/// ](https://doc.rust-lang.org/std/collections/struct.HashMap.html) functions
-/// are at your disposal.
+/// [`HashMap` functions
+/// ](https://doc.rust-lang.org/std/collections/struct.HashMap.html) that do
+/// not change the map are at your disposal.
 ///
 /// ### Example:
 /// ```
@@ -117,8 +117,8 @@ impl<V> RandMap<V> {
     /// Insert a `V` and get a handle for retrieval.
     ///
     pub fn insert(&mut self, value: V) -> Handle<V> {
-        use rand::{thread_rng, Rng};
-        let key: Handle<V> = thread_rng().gen();
+        use rand::{rng, Rng};
+        let key: Handle<V> = rng().random();
         self.0.insert(key, value);
         key
     }
@@ -132,13 +132,13 @@ impl<V> RandMap<V> {
     /// Almost equivalent to `as_hash_map().iter()`, but the iterator element
     /// type is `(Handle<V>, &V)` rather than `(&Handle<V>, &V)`
     #[inline]
-    pub fn iter(&self) -> Iter<V> {
+    pub fn iter(&self) -> Iter<'_, V> {
         Iter(self.0.iter())
     }
 
     /// The iterator element type is `(Handle<V>, &mut V)`.
     #[inline]
-    pub fn iter_mut(&mut self) -> IterMut<V> {
+    pub fn iter_mut(&mut self) -> IterMut<'_, V> {
         IterMut(self.0.iter_mut())
     }
 
@@ -155,7 +155,7 @@ impl<V> RandMap<V> {
     }
 }
 
-/// The implementation uses [`iter()`(struct.RandMap.html#method.iter)
+/// The implementation uses [`iter()`](struct.RandMap.html#method.iter)
 ///
 impl<'a, V> IntoIterator for &'a RandMap<V> {
     type Item = (Handle<V>, &'a V);
@@ -204,7 +204,7 @@ impl<'a, V> Iterator for IterMut<'a, V> {
 
 /// The handle to a [`RandMap`](Struct.RandMap.html) item is a typed `u64`.
 #[derive(Debug)]
-pub struct Handle<V>(u64, PhantomData<*const V>);
+pub struct Handle<V>(u64, PhantomData<fn() -> V>);
 
 impl<V> Handle<V> {
     #[inline]
@@ -264,10 +264,9 @@ impl<V> PartialOrd for Handle<V> {
     }
 }
 
-impl<V> rand::distributions::Distribution<Handle<V>>
-for rand::distributions::Standard {
+impl<V> rand::distr::Distribution<Handle<V>>
+for rand::distr::StandardUniform {
     fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> Handle<V> {
-        Handle(rng.gen(), PhantomData)
+        Handle(rng.random(), PhantomData)
     }
 }
-

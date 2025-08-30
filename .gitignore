@@ -1,5 +1,2 @@
-Cargo.lock
-/config
-/doc
 /target
-/tmp
+Cargo.lock
